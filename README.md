@@ -1,45 +1,61 @@
-# code-sample-description
-This sample repo will show you how to easily do X with Nylas.
+# EmailThreading_Java
+
+This sample will show you to create email threading using Java.
 
 ## Setup
 
 ### System dependencies
 
-- Add System dependencies
+- Java 18.0.2
+- Maven 3.8.6
 
 ### Gather environment variables
 
-You'll need the following values from the Nylas Dashboard:
+You'll need the following values:
 
 ```text
 ACCESS_TOKEN = ""
-CLIENT_ID = ""
-CLIENT_SECRET = ""
+CALENDAR_ID = ""
 ```
 
-Add the above values to a `.env` file.
+Add the above values to a new `.env` file:
 
-The `.env` file is added to `.gitignore`. Ensure to store these values securely.
+```bash
+$ touch .env # Then add your env variables
+```
 
 ### Install dependencies
 
-[replace with install steps]
 ```bash
-$ npm i
+org.slf4j / slf4j-simple / 1.7.25
+com.nylas.sdk / nylas-java-sdk / 1.18.0
+io.github.cdimascio / dotenv-java / 2.2.4
+spark-core / Spark Java / 2.9.4
+spark-template-mustache / Mustache / 2.7.1
+jsoup / 1.15.3
+spark-template-handlebars / Handlebars / 2.7.1
+```
+
+# Compilation
+
+To compile the comment we need to use this `maven` command:
+
+```bash
+mvn clean compile
 ```
 
 ## Usage
 
-The recommended way to use this sample is ...
+Run the application using the `maven` command:
 
-You can also clone the repository ...
+```bash
+$ mvn exec:java -Dexec.mainClass="EmailThreading"
+```
 
-You'll find more detailed instructions ...
+If successful, you will be able to find organized email threads.
 
-## Get support
-
-If you found a bug or want to suggest a new [feature/use case/sample], please file an issue.
 
 ## Learn more
 
-Visit our [Nylas documentation](https://developer.nylas.com/) to learn more.
+Read the blog post [Grouping Email Threads with Java and Nylas](https://www.nylas.com/blog/grouping-email-threads-with-java-and-nylas-dev/)
+Visit our [Nylas Java SDK documentation](https://developer.nylas.com/docs/developer-tools/sdk/java-sdk/) to learn more.
