@@ -1,10 +1,16 @@
 // Import Java Utilities
 import java.io.IOException;
+import java.io.InputStream;
+import java.net.URL;
+import java.nio.file.Path;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.*;
-import okhttp3.ResponseBody;
-import java.nio.file.Paths;
+
+import com.nylas.models.Thread;
+import com.nylas.resources.Contacts;
+import com.nylas.resources.Messages;
 import java.nio.file.Files;
 
 // Import Spark and Handlebars libraries
@@ -15,43 +21,57 @@ import static spark.Spark.*;
 import spark.template.handlebars.HandlebarsTemplateEngine;
 
 //Import Nylas Packages
-import com.nylas.*;
-import com.nylas.Thread;
+import com.nylas.NylasClient;
+import com.nylas.models.*;
 
 //Import DotEnv to handle .env files
 import io.github.cdimascio.dotenv.Dotenv;
 
 public class EmailThreading {
 
-    static RemoteCollection<Contact> get_contact(Contacts _contact, String email) throws RequestFailedException, IOException {
-        RemoteCollection<Contact> contact_list = _contact.list(new ContactQuery().email(email));
-        return contact_list;
+    static ListResponse<Contact> get_contact(String grant_id, NylasClient nylas, String email) throws NylasSdkTimeoutError, NylasApiError {
+    ListContactsQueryParams query_params = new ListContactsQueryParams.
+            Builder().
+            email(email).
+            build();
+        return nylas.contacts().list(grant_id, query_params);
     }
 
-    static void download_contact_picture(NylasAccount account, String id) throws RequestFailedException, IOException{
-        try (ResponseBody picResponse = account.contacts().downloadProfilePicture(id)) {
-            Files.copy(picResponse.byteStream(), Paths.get("src/main/resources/public/images/" + id +".png"));
-        }catch (Exception e){
-            System.out.println("Image was already downloaded");
+    static void download_contact_picture(String grant_id, NylasClient nylas, String id) throws NylasSdkTimeoutError, NylasApiError{
+        Contact contact = nylas.contacts().find(grant_id, id).getData();
+        String img = "src/main/resources/public/images/" + contact.getGivenName() + "_" + contact.getSurname() + ".png";
+        try {
+            assert contact.getPictureUrl() != null;
+            Path target = Path.of(img);
+            Files.deleteIfExists(target);
+            try(InputStream in = new URL(contact.getPictureUrl()).openStream()){
+                Files.copy(in, target);
+            }
+        } catch (IOException e) {
+            throw new RuntimeException(e);
         }
     }
 
-    public static void main(String[] args) {
+    public static void main(String[] args) throws
+            NylasSdkTimeoutError, NylasApiError
+    {
+        main_thread mainThread = new main_thread();
+        ArrayList<main_thread> data_threads = new ArrayList<>();
+        ArrayList<ArrayList<main_thread>> all_threads = new ArrayList<>();
+
         staticFiles.location("/public");
         // Load the .env file
         Dotenv dotenv = Dotenv.load();
-        // Create the client object
-        NylasClient client = new NylasClient();
         // Connect it to Nylas using the Access Token from the .env file
-        NylasAccount account = client.account(dotenv.get("ACCESS_TOKEN"));
+        NylasClient nylas = new NylasClient.Builder(dotenv.get("V3_TOKEN_API")).build();
         // Get access to messages
-        Messages messages = account.messages();
+        Messages messages = nylas.messages();
         // Get access to contacts
-        Contacts contacts = account.contacts();
+        Contacts contacts = nylas.contacts();
         // Default path when we load our web application
 
         // Hashmap to send parameters to our handlebars view
-        Map map = new HashMap();
+        Map<String, String> map = new HashMap<String, String>();
         map.put("search", "");
 
         get("/", (request, response) ->
@@ -62,13 +82,18 @@ public class EmailThreading {
 
         // When we submit the form, we're posting data
         post("/", (request, response) -> {
+            all_threads.clear();
             // Get parameter from form
             String search = request.queryParams("search");
             // Search all threads related to the email address
-            Threads threads = account.threads();
-            List<Thread> thread = threads.list(new ThreadQuery().
-                    in("inbox").from(search)).fetchAll();
-            if (search.equals("")) {
+
+            ListThreadsQueryParams queryParams = new ListThreadsQueryParams.Builder().
+                    searchQueryNative("from: " + search).
+                    build();
+
+            ListResponse<Thread> thread = nylas.threads().list(dotenv.get("GRANT_ID"), queryParams);
+
+            if (search.isEmpty()) {
                 String halt_msg = "<html>\n" +
                         "<head>\n" +
                         "    <script src=\"https://cdn.tailwindcss.com\"></script>\n" +
@@ -83,37 +108,32 @@ public class EmailThreading {
                 halt(halt_msg);
             }
 
-            // This ArrayList will hold all the threads with their
-            // accompanying information
-            ArrayList<ArrayList<ArrayList<String>>> _threads = new ArrayList<ArrayList<ArrayList<String>>>();
+            String body = "";
+            String names = "";
+            String pictures = "";
 
             // Look for threads with more than 1 message
-            for (Thread msg_thread : thread) {
-                // Auxiliary variables
-                ArrayList<ArrayList<String>> _thread = new ArrayList<ArrayList<String>>();
-                ArrayList<String> _messages = new ArrayList<String>();
-                ArrayList<String> aux_messages = new ArrayList<String>();
-                ArrayList<String> _pictures = new ArrayList<String>();
-                ArrayList<String> _names = new ArrayList<String>();
+            for (Thread msg_thread : thread.getData()) {
 
                 // Only add threads with two messages or more
+                assert msg_thread.getMessageIds() != null;
                 if (msg_thread.getMessageIds().size() > 1) {
                     // Get the subject of the first email
-                    aux_messages.add(msg_thread.getSubject());
-                    _thread.add(aux_messages);
+                    String subject = msg_thread.getSubject();
                     // Loop through all messages contained in the thread
                     for (String message_ids : msg_thread.getMessageIds()) {
                         // Get information from the message
-                        Message message = messages.get(message_ids);
+                        Response<Message> message = nylas.messages().find(dotenv.get("GRANT_ID"), message_ids);
                         // Try to get the contact information
-                        RemoteCollection<Contact> contact = get_contact(contacts, message.getFrom().get(0).getEmail());
-                        if (contact != null && !contact.fetchAll().get(0).getId().isEmpty()) {
+                        ListResponse<Contact> contact = get_contact(dotenv.get("GRANT_ID"), nylas, message.getData().getFrom().get(0).getEmail());
+                        if (!contact.getData().get(0).getId().isEmpty()) {
                             // If the contact is available, downloads its profile picture
-                            download_contact_picture(account, contact.fetchAll().get(0).getId());
+                            download_contact_picture(dotenv.get("GRANT_ID"), nylas, contact.getData().get(0).getId());
                         }
                         // Remove extra information from the message, like appended
                         //  message, email and phone number
-                        String parsed_message = message.getBody();
+                        String parsed_message = message.getData().getBody();
+                        assert parsed_message != null;
                         parsed_message = parsed_message.replaceAll("\\\\n", "\n\n");
                         parsed_message = Jsoup.clean(parsed_message, Safelist.basic());
                         // Phone number
@@ -126,42 +146,43 @@ public class EmailThreading {
                         pattern_key = "(?s)(\\bOn.*\\b)(?!.*\\1).+";
                         parsed_message = parsed_message.replaceAll(pattern_key, "");
                         // Twitter handler
-                        pattern_key = "(?i)<span>twitter:.+";
+                        pattern_key = "(?i)twitter:.+";
                         parsed_message = parsed_message.replaceAll(pattern_key, "");
-                        _messages.add(parsed_message);
+                        body = parsed_message;
                         // Convert date to something readable
-                        LocalDateTime ldt = LocalDateTime.ofInstant(message.getDate(), ZoneOffset.UTC);
+                        LocalDateTime ldt = LocalDateTime.ofInstant(Instant.ofEpochSecond(message.getData().getDate()), ZoneOffset.UTC);
                         String date = ldt.getYear() + "-" + ldt.getMonthValue() + "-" + ldt.getDayOfMonth();
                         String time = ldt.getHour() + ":" + ldt.getMinute() + ":" + ldt.getSecond();
                         // If there's no contact
-                        if (contact == null || contact.fetchAll().get(0).getId().isEmpty()) {
-                            _pictures.add("NotFound.png");
-                            _names.add("Not Found" + " on" + date + " at " + time);
+                        if (contact.getData().get(0).getId().isEmpty()) {
+                            pictures = "NotFound.png";
+                            names = "Not Found" + " on" + date + " at " + time;
                         } else {
                             // If there's a contact, pass picture information,
                             // name and date and time of message
-                            _pictures.add(contact.fetchAll().get(0).getId() + ".png");
-                            _names.add(contact.fetchAll().get(0).getGivenName() + " " +
-                                    contact.fetchAll().get(0).getSurname() + " on " +
-                                    date + " at " + time);
+                            pictures = contact.getData().get(0).getGivenName() + "_" + contact.getData().get(0).getSurname() + ".png";
+                            names = contact.getData().get(0).getGivenName() + " " +
+                                    contact.getData().get(0).getGivenName() + " on " +
+                                    date + " at " + time;
                         }
-
+                        main_thread new_mainThread = new main_thread();
+                        new_mainThread.setThread(subject);
+                        new_mainThread.setMessage(body);
+                        new_mainThread.setNames(names);
+                        new_mainThread.setPicture(pictures);
+                        data_threads.add(new_mainThread);
                     }
-                // Add ArrayLists to main thread arraylist
-                // and then add them all
-                _thread.add(_messages);
-                _thread.add(_pictures);
-                _thread.add(_names);
-                _threads.add(_thread);
+                    all_threads.add(new ArrayList<>(data_threads));
+                    data_threads.clear();
                 }
             }
 
             // Hashmap to send parameters to our handlebars view
-            Map thread_map = new HashMap();
+            Map<String, ArrayList<ArrayList<main_thread>>> thread_map = new HashMap<String, ArrayList<ArrayList<main_thread>>>();
             // We're passing the same _threads ArrayList twice
             // as we need the copy for processing
-            thread_map.put("threads", _threads);
-            thread_map.put("inner_threads", _threads);
+            thread_map.put("threads", all_threads);
+            thread_map.put("inner_threads", all_threads);
 
             // Call the handlebars template
             return new ModelAndView(thread_map, "main.hbs");
