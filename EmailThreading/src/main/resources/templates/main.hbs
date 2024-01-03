@@ -11,7 +11,9 @@
     <br>
     <form method="post">
         <div class="flex bg-blue-300 border-blue-600 border-b p-4 m-4 rounded place-items-center">
-            <input type="text" name="search" value="" size="50"></input>&nbsp;&nbsp;
+            <label>
+                <input type="text" name="search" value="" size="50"></input>
+            </label>&nbsp;&nbsp;
             <button type="submit" class="block bg-blue-500 hover:bg-blue-700 text-white text-lg mx-auto py-2 px-4 rounded-full">Search</button>
         </div>
     </form>
@@ -27,7 +29,7 @@
                     data-accordion-target="#accordion-collapse-body-{{@index}}"
                     aria-expanded="false" aria-controls="accordion-collapse-body-{{@index}}">
                 <!-- Title of the thread -->
-                <span>{{this.[0].[0]}}</span>
+                <span>{{this.[0].thread}}</span>
                 <svg data-accordion-icon class="w-6 h-6 shrink-0" fill="currentColor"
                      viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
                     <path fill-rule="evenodd"
@@ -39,16 +41,12 @@
         </h2>
         <div id="accordion-collapse-body-{{@index}}" class="hidden" aria-labelledby="accordion-collapse-heading-{{@index}}">
             <div class="p-5 font-light border border-b-0 border-gray-200 dark:border-gray-700">
-                <div class="grid "grid-rows-{{this.[1].length}}" grid-flow-col gap-4">
-                    {{#each this.[1]}}
+                <div class="grid "grid-rows-{{this.length}}" grid-flow-col gap-4">
+                    {{#each this}}
                         <div class="col-span-2 ...">
-                            {{#with (lookup ../this.[2] @index)}}
-                                <img class="mx-auto" src="images/{{this}}"><b>
-                            {{/with}}
-                            {{#with (lookup ../this.[3] @index)}}
-                                <p class="text-center">{{this}}</p></b><br>
-                            {{/with}}
-                            {{{this}}}
+                            <img class="mx-auto" src="images/{{this.picture}}">
+                            <b><p class="text-center">{{this.names}}</p></b><br>
+                            {{{this.message}}}
                         </div>
                     <br>
                     {{/each}}
