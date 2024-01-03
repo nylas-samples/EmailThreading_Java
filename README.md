@@ -14,8 +14,8 @@ This sample will show you to create email threading using Java.
 You'll need the following values:
 
 ```text
-ACCESS_TOKEN = ""
-CALENDAR_ID = ""
+V3_TOKEN_API=API_KEY
+GRANT_ID=GRANT_ID
 ```
 
 Add the above values to a new `.env` file:
@@ -34,6 +34,7 @@ spark-core / Spark Java / 2.9.4
 spark-template-mustache / Mustache / 2.7.1
 jsoup / 1.15.3
 spark-template-handlebars / Handlebars / 2.7.1
+org.projectlombok / lombok / 1.18.28
 ```
 
 # Compilation
@@ -56,6 +57,3 @@ If successful, you will be able to find organized email threads.
 
 
 ## Learn more
-
-Read the blog post [Grouping Email Threads with Java and Nylas](https://www.nylas.com/blog/grouping-email-threads-with-java-and-nylas-dev/)
-Visit our [Nylas Java SDK documentation](https://developer.nylas.com/docs/developer-tools/sdk/java-sdk/) to learn more.
